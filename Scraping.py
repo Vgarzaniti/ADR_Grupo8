@@ -5,6 +5,8 @@ import io
 import pandas as pd
 import matplotlib.pyplot as plt
 import geopandas as gpd
+import folium 
+from folium.plugins import MarkerCluster
 
 # ==============================
 # Descargar Shapefile de Natural Earth para utilizar en GeoPandas
@@ -134,4 +136,43 @@ gdf.plot(
 )
 plt.title("Mapa de Sismos en Argentina y Países Limitrofes (2015-2025)")
 plt.show()
+
+# ==============================
+# Desarrollo de Mapa Interactivo con Folium
+# ==============================
+m = folium.Map(location=[-34.6, -58.4], zoom_start=4)
+
+# Diccionario para cada año
+años = sorted(df["Año"].unique())
+años_grupos = {}
+
+for año in años:
+    fg = folium.FeatureGroup(name=str(año))
+    años_grupos[año] = fg
+    m.add_child(fg)
+
+# Añadir puntos de sismos a la capa correspondiente
+for idx, row in df.iterrows():
+    colores_magnitud = "green" if row["Magnitud"] < 4 else "orange" if row["Magnitud"] < 5 else "red"
+    folium.CircleMarker(
+        location=[row["Latitud"], row["Longitud"]],
+        radius=row["Magnitud"] * 2,
+        color=colores_magnitud,
+        fill=True,
+        fill_opacity=0.6,
+        popup=(
+            f"<b>Lugar:</b> {row['Lugar']}<br>"
+            f"<b>Magnitud:</b> {row['Magnitud']}<br>"
+            f"<b>Profundidad:</b> {row['Profundidad_km']} km<br>"
+            f"<b>Fecha:</b> {row['Tiempo'].strftime('%Y-%m-%d')}"
+        )
+    ).add_to(años_grupos[row["Año"]])
+
+# Añadir control de capas
+folium.LayerControl(collapsed=False).add_to(m)
+
+# Guardar mapa en formato HTML
+m.save("mapa_sismos_interactivo.html")
+print("Mapa interactivo guardado como 'mapa_sismos_interactivo.html'")
+
 
