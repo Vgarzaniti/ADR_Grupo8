@@ -1,3 +1,4 @@
+from string import Template
 import requests
 import os
 import zipfile
@@ -6,7 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import geopandas as gpd
 import folium 
-from folium.plugins import MarkerCluster
+from branca.element import Template, MacroElement
 
 # ==============================
 # Descargar Shapefile de Natural Earth para utilizar en GeoPandas
@@ -151,25 +152,61 @@ for año in años:
     años_grupos[año] = fg
     m.add_child(fg)
 
+def color_magnitud(magnitud):
+    if 4 <= magnitud < 5:         # Ligero
+        return 'green'
+    elif 5 <= magnitud < 6:       # Moderado
+        return 'yellow'
+    elif 6 <= magnitud < 7:       # Fuerte
+        return 'orange'
+    elif 7 <= magnitud < 8:       # Mayor
+        return 'red'
+    elif magnitud >= 8:           # Épico o catastrófico
+        return 'darkred'          
+    else:
+        return 'blue'             # opcional para <4
+    
 # Añadir puntos de sismos a la capa correspondiente
 for idx, row in df.iterrows():
-    colores_magnitud = "green" if row["Magnitud"] < 4 else "orange" if row["Magnitud"] < 5 else "red"
     folium.CircleMarker(
         location=[row["Latitud"], row["Longitud"]],
         radius=row["Magnitud"] * 2,
-        color=colores_magnitud,
+        color= color_magnitud(row["Magnitud"]),
         fill=True,
         fill_opacity=0.6,
         popup=(
             f"<b>Lugar:</b> {row['Lugar']}<br>"
             f"<b>Magnitud:</b> {row['Magnitud']}<br>"
             f"<b>Profundidad:</b> {row['Profundidad_km']} km<br>"
-            f"<b>Fecha:</b> {row['Tiempo'].strftime('%Y-%m-%d')}"
+            f"<b>Fecha y Hora:</b> {row['Tiempo']}<br>"
         )
     ).add_to(años_grupos[row["Año"]])
 
+# Leyenda de colores por magnitudes
+template = """
+{% macro html(this, kwargs) %}
+<div style="position: fixed; 
+            bottom: 50px; left: 50px; width: 250px; height: 160px; 
+            background-color: white; z-index:9999; font-size:14px;
+            border:2px solid grey; border-radius:6px; padding: 10px;">
+<b>Magnitud</b><br>
+&nbsp;<i class="fa fa-circle" style="color:blue"></i>&nbsp; < 4.0<br>
+&nbsp;<i class="fa fa-circle" style="color:green"></i>&nbsp; 4.0 - 4.9 (Ligero)<br>
+&nbsp;<i class="fa fa-circle" style="color:yellow"></i>&nbsp; 5.0 - 5.9 (Moderado)<br>
+&nbsp;<i class="fa fa-circle" style="color:orange"></i>&nbsp; 6.0 - 6.9 (Fuerte)<br>
+&nbsp;<i class="fa fa-circle" style="color:red"></i>&nbsp; 7.0 - 7.9 (Mayor)<br>
+&nbsp;<i class="fa fa-circle" style="color:darkred"></i>&nbsp; ≥ 8.0 (Épico/Catastrófico)
+</div>
+{% endmacro %}
+"""
+
+macro = MacroElement()
+macro._template = Template(template)
+m.get_root().add_child(macro)
+
 # Añadir control de capas
 folium.LayerControl(collapsed=False).add_to(m)
+
 
 # Guardar mapa en formato HTML
 m.save("mapa_sismos_interactivo.html")
