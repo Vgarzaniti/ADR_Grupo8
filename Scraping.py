@@ -1,7 +1,32 @@
 import requests
+import os
+import zipfile
+import io
 import pandas as pd
 import matplotlib.pyplot as plt
 import geopandas as gpd
+
+# ==============================
+# Descargar Shapefile de Natural Earth para utilizar en GeoPandas
+# ==============================
+
+DATA_DIR = "data"
+os.makedirs(DATA_DIR, exist_ok=True)
+
+shp_file = os.path.join(DATA_DIR, "ne_110m_admin_0_countries.shp")
+
+if not os.path.exists(shp_file):
+    print("Descargando shapefile de Natural Earth...")
+    url_shp = "https://naturalearth.s3.amazonaws.com/110m_cultural/ne_110m_admin_0_countries.zip"
+    r = requests.get(url_shp)
+    if r.status_code == 200:
+        z = zipfile.ZipFile(io.BytesIO(r.content))
+        z.extractall(DATA_DIR)
+        print("Shapefile descargado y extraído en carpeta 'data/'")
+    else:
+        raise Exception("No se pudo descargar el shapefile. Verificá la URL o tu conexión.")
+else:
+    print("Shapefile ya disponible en 'data/'")
 
 # ==============================
 # Descargar datos de la API
@@ -84,14 +109,14 @@ plt.show()
 # ==============================
 
 # Cargar mapa base
-planeta = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
+planeta = gpd.read_file(shp_file)
 
 # Filtrar Sudamerica
-sudamerica = planeta[planeta["continent"] == "South America"]
+sudamerica = planeta[planeta["CONTINENT"] == "South America"]
 
 # Mapa de argentina y limitrofes
-paises = ["Argentina", "Chile", "Uruguay", "Paraguay", "Bolivia", "Brasil"]
-subset = sudamerica[sudamerica["name"].isin(paises)]
+paises = ["Argentina", "Chile", "Uruguay", "Paraguay", "Bolivia", "Brazil"]
+subset = sudamerica[sudamerica["NAME"].isin(paises)]
 
 # Convertir DataFrame a GeoDataFrame
 gdf = gpd.GeoDataFrame(
