@@ -9,7 +9,9 @@ import geopandas as gpd
 import folium 
 from branca.element import Template, MacroElement
 from folium.plugins import TimestampedGeoJson
-import json
+import numpy as np
+from scipy.stats import linregress
+
 
 # ==============================
 # Descargar Shapefile de Natural Earth para utilizar en GeoPandas
@@ -100,7 +102,7 @@ df["Año"] = df["Tiempo"].dt.year
 conteoAnual = df.groupby("Año")["Magnitud"].count()
 
 plt.figure(figsize=(10,5))
-conteoAnual.plot(kind="bar", color="steelblue", edgecolor="black")
+conteoAnual.plot(kind="bar", color="cornflowerblue", edgecolor="black")
 plt.title("Cantidad de sismos por Año en Argentina y Países Limitrofes (2015-2025)")
 plt.xlabel("Año")
 plt.ylabel("Cantidad de Sismos")
@@ -135,6 +137,7 @@ gdf.plot(
     ax=ax,
     markersize=df["Magnitud"]*2,
     color="red",
+    edgecolor="black",
     alpha=0.6,
 )
 plt.title("Mapa de Sismos en Argentina y Países Limitrofes (2015-2025)")
@@ -190,7 +193,7 @@ for _, row in df.iterrows():
 
 TimestampedGeoJson(
     {"type": "FeatureCollection", "features": features},
-    period="P1Y",
+    period="P1M",
     add_last_point=True,
     auto_play=False,
     loop=False,
@@ -229,7 +232,7 @@ print("Mapa interactivo guardado como 'mapa_sismos_interactivo.html'")
 
 
 # ==============================
-# Desarrollo de grafico con clasificacion de sismos
+# Desarrollo de grafico con clasificacion de sismos en DataFrame
 # ==============================
 
 df["Categoria"] = pd.cut (
@@ -240,8 +243,8 @@ df["Categoria"] = pd.cut (
 
 conteo_categorias = df.groupby(["Año", "Categoria"])["Magnitud"].count().unstack(fill_value=0)
 
-conteo_categorias.plot(kind="bar", stacked=True, figsize=(12,6), colormap="viridis")
-plt.title("Evolución de sismos leves, moderados y fuertes (2015-2025)")
+conteo_categorias.plot(kind="bar", stacked=False, figsize=(12,6), color=["#3a1fb4", "#2ca073", "#ff5a0e"], edgecolor="black", width=0.8)
+plt.title("Evolución de sismos leves, moderados y fuertes (2015-2025)") 
 plt.xlabel("Año")
 plt.ylabel("Cantidad de Sismos")
 plt.xticks(rotation=45)
@@ -250,4 +253,43 @@ plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
 plt.show()
 
+# ==============================
+# Aplicación y desarrollo de Ley de Gutenberg-Richter (Frecuencia-Magnitud)
+# ==============================
 
+# Calcular frecuencia acumulada
+magnitudes = np.arange(3, df["Magnitud"].max() + 0.5, 0.5)
+frecuencias = [np.sum(df["Magnitud"] >= m) for m in magnitudes]
+
+# Filtrar para evitar log10(0)
+magnitudes_validas = []
+logN_validas = []
+for m, f in zip(magnitudes, frecuencias):
+    if f > 0:
+        magnitudes_validas.append(m)
+        logN_validas.append(np.log10(f))
+
+magnitudes_validas = np.array(magnitudes_validas)
+logN_validas = np.array(logN_validas)
+
+# Ajuste lineal logN = a - bM
+slope, intercept, r_value, p_value, std_err = linregress(magnitudes_validas, logN_validas)
+
+# Generar línea de ajuste
+ajuste = intercept + slope * magnitudes_validas
+
+# Gráfico
+plt.figure(figsize=(8,6))
+plt.scatter(magnitudes_validas, logN_validas, color="indigo", label="Datos observados")
+plt.plot(magnitudes_validas, ajuste, color="red", label=f"Ajuste: logN = {intercept:.2f} {slope:+.2f}M")
+plt.title("Ley de Gutenberg–Richter (2015–2025)")
+plt.xlabel("Magnitud (M)")
+plt.ylabel("Frecuencia acumulada log10(N ≥ M)")
+plt.grid(True, which="both", linestyle="--", alpha=0.7)
+plt.legend()
+plt.show()
+
+# Resultado de ajuste
+print(f"Intercepto (a): {intercept:.3f}")
+print(f"Pendiente (b): {-slope:.3f}")
+print(f"R² del ajuste: {r_value**2:.3f}")
