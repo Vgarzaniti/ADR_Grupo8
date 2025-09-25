@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 import folium 
 from branca.element import Template, MacroElement
+from folium.plugins import TimestampedGeoJson
+import json
 
 # ==============================
 # Descargar Shapefile de Natural Earth para utilizar en GeoPandas
@@ -139,18 +141,9 @@ plt.title("Mapa de Sismos en Argentina y Países Limitrofes (2015-2025)")
 plt.show()
 
 # ==============================
-# Desarrollo de Mapa Interactivo con Folium
+# Desarrollo de Mapa Interactivo con Folium + Timeline
 # ==============================
 m = folium.Map(location=[-34.6, -58.4], zoom_start=4)
-
-# Diccionario para cada año
-años = sorted(df["Año"].unique())
-años_grupos = {}
-
-for año in años:
-    fg = folium.FeatureGroup(name=str(año))
-    años_grupos[año] = fg
-    m.add_child(fg)
 
 def color_magnitud(magnitud):
     if 4 <= magnitud < 5:         # Ligero
@@ -164,23 +157,48 @@ def color_magnitud(magnitud):
     elif magnitud >= 8:           # Épico o catastrófico
         return 'darkred'          
     else:
-        return 'blue'             # opcional para <4
-    
-# Añadir puntos de sismos a la capa correspondiente
-for idx, row in df.iterrows():
-    folium.CircleMarker(
-        location=[row["Latitud"], row["Longitud"]],
-        radius=row["Magnitud"] * 2,
-        color= color_magnitud(row["Magnitud"]),
-        fill=True,
-        fill_opacity=0.6,
-        popup=(
-            f"<b>Lugar:</b> {row['Lugar']}<br>"
-            f"<b>Magnitud:</b> {row['Magnitud']}<br>"
-            f"<b>Profundidad:</b> {row['Profundidad_km']} km<br>"
-            f"<b>Fecha y Hora:</b> {row['Tiempo']}<br>"
-        )
-    ).add_to(años_grupos[row["Año"]])
+        return 'blue'            
+
+# Contruccion del GeoJSON con timestamps
+features = []
+for _, row in df.iterrows():
+    features.append({
+        "type": "Feature",
+        "geometry": {
+            "type": "Point",
+            "coordinates": [row["Longitud"], row["Latitud"]],
+        },
+        "properties": {
+            "time": row["Tiempo"].strftime("%Y-%m-%d"),
+            "popup": (
+                f"<b>Lugar:</b> {row['Lugar']}<br>"
+                f"<b>Magnitud:</b> {row['Magnitud']}<br>"
+                f"<b>Profundidad:</b> {row['Profundidad_km']} km<br>"
+                f"<b>Fecha</b> {row['Tiempo']}"
+            ),
+            "icon": "circle",
+            "iconstyle": {
+                "fillColor": color_magnitud(row["Magnitud"]),
+                "fillOpacity": 0.6,
+                "stroke": "true",
+                "color": "black",
+                "weight": 0.5,
+                "radius": row["Magnitud"] * 2
+            }
+        }
+    })
+
+TimestampedGeoJson(
+    {"type": "FeatureCollection", "features": features},
+    period="P1Y",
+    add_last_point=True,
+    auto_play=False,
+    loop=False,
+    max_speed=1,
+    loop_button=True,
+    date_options="YYYY-MM-DD",
+    time_slider_drag_update=True,
+).add_to(m)
 
 # Leyenda de colores por magnitudes
 template = """
@@ -204,12 +222,32 @@ macro = MacroElement()
 macro._template = Template(template)
 m.get_root().add_child(macro)
 
-# Añadir control de capas
-folium.LayerControl(collapsed=False).add_to(m)
-
 
 # Guardar mapa en formato HTML
 m.save("mapa_sismos_interactivo.html")
 print("Mapa interactivo guardado como 'mapa_sismos_interactivo.html'")
+
+
+# ==============================
+# Desarrollo de grafico con clasificacion de sismos
+# ==============================
+
+df["Categoria"] = pd.cut (
+    df["Magnitud"],
+    bins=[0, 4, 6, 10],
+    labels=["Leves (<4)", "Moderados (4-6)", "Fuertes (≥6)"]
+)
+
+conteo_categorias = df.groupby(["Año", "Categoria"])["Magnitud"].count().unstack(fill_value=0)
+
+conteo_categorias.plot(kind="bar", stacked=True, figsize=(12,6), colormap="viridis")
+plt.title("Evolución de sismos leves, moderados y fuertes (2015-2025)")
+plt.xlabel("Año")
+plt.ylabel("Cantidad de Sismos")
+plt.xticks(rotation=45)
+plt.legend(title="Categoría")
+plt.grid(axis="y", linestyle="--", alpha=0.7)
+plt.tight_layout()
+plt.show()
 
 
