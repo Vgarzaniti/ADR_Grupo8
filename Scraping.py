@@ -162,6 +162,30 @@ def color_magnitud(magnitud):
     else:
         return 'blue'            
 
+# Crear capas por año
+for year in sorted(df["Tiempo"].dt.year.unique()):
+    capa = folium.FeatureGroup(name=f"Sismos {year}", show=False)
+    subset = df[df["Tiempo"].dt.year == year]
+    
+    for _, row in subset.iterrows():
+        folium.CircleMarker(
+            location=[row["Latitud"], row["Longitud"]],
+            radius=row["Magnitud"] * 2,
+            color="black",
+            weight=0.5,
+            fill=True,
+            fill_color=color_magnitud(row["Magnitud"]),
+            fill_opacity=0.6,
+            popup=(
+                f"<b>Lugar:</b> {row['Lugar']}<br>"
+                f"<b>Magnitud:</b> {row['Magnitud']}<br>"
+                f"<b>Profundidad:</b> {row['Profundidad_km']} km<br>"
+                f"<b>Fecha:</b> {row['Tiempo']}"
+            )
+        ).add_to(capa)
+    
+    capa.add_to(m)
+
 # Contruccion del GeoJSON con timestamps
 features = []
 for _, row in df.iterrows():
@@ -172,7 +196,7 @@ for _, row in df.iterrows():
             "coordinates": [row["Longitud"], row["Latitud"]],
         },
         "properties": {
-            "time": row["Tiempo"].strftime("%Y-%m-%d"),
+            "time": row["Tiempo"].strftime("%Y-%m-%dT%H:%M:%S"),
             "popup": (
                 f"<b>Lugar:</b> {row['Lugar']}<br>"
                 f"<b>Magnitud:</b> {row['Magnitud']}<br>"
@@ -183,7 +207,7 @@ for _, row in df.iterrows():
             "iconstyle": {
                 "fillColor": color_magnitud(row["Magnitud"]),
                 "fillOpacity": 0.6,
-                "stroke": "true",
+                "stroke": True,
                 "color": "black",
                 "weight": 0.5,
                 "radius": row["Magnitud"] * 2
@@ -224,7 +248,7 @@ template = """
 macro = MacroElement()
 macro._template = Template(template)
 m.get_root().add_child(macro)
-
+folium.LayerControl(collapsed=False).add_to(m)
 
 # Guardar mapa en formato HTML
 m.save("mapa_sismos_interactivo.html")
@@ -241,7 +265,7 @@ df["Categoria"] = pd.cut (
     labels=["Leves (<4)", "Moderados (4-6)", "Fuertes (≥6)"]
 )
 
-conteo_categorias = df.groupby(["Año", "Categoria"])["Magnitud"].count().unstack(fill_value=0)
+conteo_categorias = df.groupby(["Año", "Categoria"], observed=False)["Magnitud"].count().unstack(fill_value=0)
 
 conteo_categorias.plot(kind="bar", stacked=False, figsize=(12,6), color=["#3a1fb4", "#2ca073", "#ff5a0e"], edgecolor="black", width=0.8)
 plt.title("Evolución de sismos leves, moderados y fuertes (2015-2025)") 
@@ -278,7 +302,6 @@ slope, intercept, r_value, p_value, std_err = linregress(magnitudes_validas, log
 # Generar línea de ajuste
 ajuste = intercept + slope * magnitudes_validas
 
-# Gráfico
 plt.figure(figsize=(8,6))
 plt.scatter(magnitudes_validas, logN_validas, color="indigo", label="Datos observados")
 plt.plot(magnitudes_validas, ajuste, color="red", label=f"Ajuste: logN = {intercept:.2f} {slope:+.2f}M")
