@@ -1,0 +1,8 @@
+requests
+pandas
+matplotlib
+geopandas
+folium
+branca
+numpy
+scipy
